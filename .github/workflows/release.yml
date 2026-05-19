@@ -47,6 +47,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Install Syft (for SBOM generation by goreleaser)
+        # goreleaser invokes `syft` to produce a Software Bill of Materials
+        # for each release artifact. The GitHub-hosted ubuntu-latest runner
+        # does NOT ship syft, so the goreleaser run fails at the SBOM step
+        # unless syft is installed up front. anchore/sbom-action publishes a
+        # tiny download-only sub-action that drops the syft binary into PATH
+        # without running it — exactly what goreleaser then shells out to.
+        uses: anchore/sbom-action/download-syft@v0
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
