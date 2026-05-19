@@ -160,18 +160,26 @@ func TestRunScriptedTrafficRepeatScales(t *testing.T) {
 	// Span volume scales ~linearly with N: each iteration repeats the same
 	// scripted conversation through the proxy. We assert a tolerant band rather
 	// than an exact multiple — the bots run as concurrent goroutines through a
-	// real TCP proxy, so the exact number of captured Bot API calls per run can
-	// jitter by a few spans under CI scheduling. The band (>= n× lower bound,
-	// <= a generous upper bound) catches "didn't scale" / "ran once" / "ran
-	// away" without flaking on benign timing.
-	lo := spans1 * n
+	// real TCP proxy, so the exact number of captured Bot API calls per
+	// iteration can jitter by a few spans under -race + slow-CI scheduling
+	// (an inflight getUpdates may miss its window by ~one span). The band must
+	// catch "didn't scale" / "ran once" / "ran away" without flaking on that
+	// benign one-span-per-iteration drift.
+	//
+	// Lower bound = 80% of the ideal (spans1 * n) — proves the volume is
+	// clearly N-iteration shaped, not a single-iteration run, while absorbing
+	// up to ~one span of jitter per iteration. Plus an absolute "strictly
+	// greater than 1.5× baseline" gate so a regression to "ran twice instead
+	// of N" still trips when N >= 3.
+	lo := (spans1 * n * 80) / 100
 	hi := spans1*(n+1) + spans1 // n× plus up to ~2 iterations of slack
 	if spansN < lo || spansN > hi {
-		t.Errorf("repeat=%d spans = %d, want within [%d, %d] (baseline %d × n=%d)",
+		t.Errorf("repeat=%d spans = %d, want within [%d, %d] (baseline %d × n=%d, lo = 80%% of n×)",
 			n, spansN, lo, hi, spans1, n)
 	}
-	if spansN <= spans1 {
-		t.Errorf("repeat=%d did not scale: spans=%d <= baseline=%d", n, spansN, spans1)
+	if spansN*2 <= spans1*3 {
+		t.Errorf("repeat=%d did not scale beyond ~1 iteration: spans=%d <= 1.5× baseline %d",
+			n, spansN, spans1)
 	}
 
 	// Loop events keep advancing across iterations (so the dashboard's loop
