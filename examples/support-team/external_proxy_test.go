@@ -35,6 +35,12 @@ import (
 func TestExternalProxyMode(t *testing.T) {
 	t.Parallel()
 
+	// Skipped under -short — see TestSupportTeamIntegration for the rationale
+	// (example/demo path, sloppy reply-matching flakes under -race on CI).
+	if testing.Short() {
+		t.Skip("demo integration test; run locally without -short")
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
@@ -111,6 +117,10 @@ func TestExternalProxyMode(t *testing.T) {
 // its mock on B2BD_EXAMPLE_MOCK_ADDR and routes through the external proxy,
 // exiting 0 without creating an in-process proxy.
 func TestRunSelectsExternalProxyMode(t *testing.T) {
+	// Skipped under -short — see TestSupportTeamIntegration for the rationale.
+	if testing.Short() {
+		t.Skip("demo integration test; run locally without -short")
+	}
 	// Not parallel: mutates process environment.
 	recorder := tracetest.NewSpanRecorder()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))

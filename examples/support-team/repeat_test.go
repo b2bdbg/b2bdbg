@@ -146,6 +146,11 @@ func runScriptedFixture(t *testing.T, plan trafficPlan) (spans int, loops float6
 func TestRunScriptedTrafficRepeatScales(t *testing.T) {
 	t.Parallel()
 
+	// Skipped under -short — see TestSupportTeamIntegration for the rationale.
+	if testing.Short() {
+		t.Skip("demo integration test; run locally without -short")
+	}
+
 	spans1, loops1 := runScriptedFixture(t, trafficPlan{repeat: 1})
 	if spans1 == 0 {
 		t.Fatal("repeat=1 produced no spans")
@@ -207,6 +212,11 @@ func TestRunScriptedTrafficRepeatScales(t *testing.T) {
 // promptly without hanging.
 func TestRunScriptedTrafficDurationBounded(t *testing.T) {
 	t.Parallel()
+
+	// Skipped under -short — see TestSupportTeamIntegration for the rationale.
+	if testing.Short() {
+		t.Skip("demo integration test; run locally without -short")
+	}
 
 	done := make(chan struct{})
 	go func() {

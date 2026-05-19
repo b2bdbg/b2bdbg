@@ -14,6 +14,31 @@ make example      # offline support-team demo
 make example-test # integration test for the example
 ```
 
+### CI vs local test coverage
+
+CI runs the core suite with `-race -short -timeout 180s`. The `-short` flag
+**skips the `examples/support-team` demo integration tests** (Router demo,
+external-proxy demo, repeat-scales, duration-bounded). Those tests exercise
+example code, not the production proxy/capture/telemetry core, and use a
+deliberately-simple reply-matching demo Router that is timing-sensitive under
+heavy `-race` scheduling on shared GitHub runners. They run reliably locally.
+
+The actual release gates are:
+
+- **CI** — `internal/{proxy,capture,telemetry,config,server}` + `pkg/botapi`
+  unit tests, fuzz, and concurrency-stress tests. The release-critical paths.
+- **`make compose-smoke`** — full Docker stack end-to-end gate. Run before
+  tagging a release.
+- **`make test-telegram`** — opt-in real-Telegram e2e (the only path that
+  validates capture against the real Telegram edge, including gzip decode).
+
+Run example tests locally before merging changes that touch the
+`examples/support-team/` package:
+
+```bash
+go test -race -timeout 180s ./examples/support-team/...   # no -short
+```
+
 ### Constrained environments
 
 If `/tmp` or the default GOCACHE is on a small or read-only partition, set:
