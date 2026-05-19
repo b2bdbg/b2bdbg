@@ -1,5 +1,10 @@
 version: "2"
 
+# golangci-lint v2 layout: per-linter settings live UNDER `linters:` as
+# `linters.settings.<name>` (the v1 top-level `linters-settings:` block is no
+# longer recognised by the v2 schema and fails `config verify` immediately).
+# See https://golangci-lint.run/docs/product/migration-guide.
+
 formatters:
   enable:
     - gofumpt
@@ -11,16 +16,26 @@ linters:
     - errcheck
     - revive
 
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-  revive:
-    rules:
-      - name: exported
-        arguments:
-          - disableStutteringCheck
-      - name: var-naming
+  settings:
+    errcheck:
+      # check-type-assertions stays ON — those *are* real correctness checks
+      # (an unchecked failed assertion is a runtime panic).
+      #
+      # check-blank stays OFF (the Go community default). The codebase has ~30
+      # legitimate `_, _ :=` discards — deferred Close on response bodies,
+      # Fprintln to http.ResponseWriter (client gone, unrecoverable), short-
+      # circuit parsers that fall back when parse fails, fire-and-forget
+      # goroutines. Turning check-blank on without rewriting every site to
+      # explicitly log+ignore would be aspirational, not enforced — exactly
+      # the kind of claim/reality drift this repo refuses to ship.
+      check-type-assertions: true
+      check-blank: false
+    revive:
+      rules:
+        - name: exported
+          arguments:
+            - disableStutteringCheck
+        - name: var-naming
 
 issues:
   max-issues-per-linter: 0

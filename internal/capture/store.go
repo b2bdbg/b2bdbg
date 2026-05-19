@@ -3,12 +3,27 @@ package capture
 import (
 	"container/list"
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/b2bdbg/b2bdbg/internal/proxy"
 )
+
+// lruEntryOf extracts the *lruEntry stored on an LRU list element. The
+// invariant is that every value placed into Store.list is *lruEntry — this
+// helper makes that invariant a single asserted-and-checked site (a
+// comma-ok'd type assertion that panics with a clear diagnostic if it is
+// ever violated) instead of a scattered set of unchecked `.(*lruEntry)`
+// casts that errcheck rightly flags as panic risks.
+func lruEntryOf(el *list.Element) *lruEntry {
+	e, ok := el.Value.(*lruEntry)
+	if !ok {
+		panic(fmt.Sprintf("capture: lru element has unexpected type %T (want *lruEntry) — programmer error", el.Value))
+	}
+	return e
+}
 
 // -----------------------------------------------------------------------
 // Store config
@@ -297,7 +312,7 @@ func (s *Store) ConversationCount() int {
 // The second return value contains the conversation IDs of any evicted entries.
 func (s *Store) getOrCreateLocked(key ConvKey, now time.Time) (*Conversation, []string) {
 	if el, ok := s.lmap[key]; ok {
-		return el.Value.(*lruEntry).conv, nil
+		return lruEntryOf(el).conv, nil
 	}
 
 	// Evict LRU tail if at cap.
@@ -323,7 +338,7 @@ func (s *Store) evictOldestLocked() []string {
 	if tail == nil {
 		return nil
 	}
-	entry := tail.Value.(*lruEntry)
+	entry := lruEntryOf(tail)
 	s.list.Remove(tail)
 	delete(s.lmap, entry.key)
 	return []string{entry.conv.ID}
@@ -340,7 +355,7 @@ func (s *Store) evictStaleLocked(now time.Time) []string {
 		if tail == nil {
 			break
 		}
-		entry := tail.Value.(*lruEntry)
+		entry := lruEntryOf(tail)
 		if entry.conv.LastSeen.After(cutoff) {
 			break // tail is fresh; no older entries exist
 		}
