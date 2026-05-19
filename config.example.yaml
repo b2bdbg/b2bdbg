@@ -1,0 +1,85 @@
+# config.example.yaml — b2bdbg reference configuration
+# Copy to config.yaml and adjust as needed.
+# Precedence: CLI flags > B2BD_* env vars > this file.
+
+# TCP address the server listens on.
+# Env: B2BD_LISTEN_ADDR
+listen_addr: ":8080"
+
+# Upstream Telegram Bot API base URL.
+# Override to point at a local mock for testing.
+# Env: B2BD_TELEGRAM_BASE_URL
+telegram_base_url: "https://api.telegram.org"
+
+# OTLP gRPC endpoint for OpenTelemetry traces.
+# Leave empty to fall back to a stdout (pretty-printed) exporter — tracing is
+# never silently disabled; the binary stays useful with no external services.
+# Set to e.g. "localhost:4317" to export via OTLP/gRPC instead.
+# Env: B2BD_OTEL_ENDPOINT
+otel_endpoint: ""
+
+# Minimum log level: debug | info | warn | error
+# Env: B2BD_LOG_LEVEL
+log_level: "info"
+
+# How long graceful shutdown waits before forcibly closing.
+# Env: B2BD_SHUTDOWN_TIMEOUT
+shutdown_timeout: 15s
+
+# Estimated cost in USD per 1 000 tokens. Used to compute the b2b_token_cost_usd
+# metric and b2b.cost.usd.est span attribute (heuristic: chars/4 tokens × rate).
+# Set to 0 (the default) to disable cost accumulation.
+# Example: 0.002 matches gpt-4o-mini input pricing as of 2025.
+# Env: B2BD_COST_PER_K_TOKENS
+cost_per_k_tokens: 0
+
+# Maximum request/response body bytes parsed for capture/telemetry per
+# exchange. The full body is ALWAYS still forwarded transparently; this only
+# bounds what is parsed for span attributes and loop detection. A body that
+# exceeds this cap sets the b2b.capture.truncated span attribute to true.
+# Default: 1048576 (1 MiB). Must be >= 1024 bytes.
+# Env: B2BD_BODY_CAP_BYTES
+body_cap_bytes: 1048576
+
+# Webhook ingress routes (optional).
+#
+# Register one entry per bot that sends updates to b2bdbg via Telegram webhook
+# (i.e. the bot called setWebhook with a URL pointing at this proxy).
+#
+# b2bdbg registers /webhook/<label> on its listen address.  When Telegram POSTs
+# an update to that URL, b2bdbg:
+#   1. Validates the X-Telegram-Bot-Api-Secret-Token header (if secret_token set).
+#   2. Captures the update with the correct TokenHash derived from token.
+#   3. Forwards the body to target so the bot's own server processes it.
+#
+# All capture/telemetry pipeline steps (BotRegistry, loop detection, OTel span,
+# Prometheus metrics) work identically to long-polling ingress.
+#
+# Security notes:
+#   - The raw token never appears in the URL or logs — only its 16-char SHA-256
+#     hash is stored.
+#   - Use secret_token (set via setWebhook) to authenticate Telegram deliveries:
+#     if set, b2bdbg rejects deliveries whose X-Telegram-Bot-Api-Secret-Token
+#     header does not match. Leave empty to skip the check.
+#   - Request bodies are capped at the same body_cap_bytes limit used by the
+#     forward proxy (default 1 MiB); only the capped prefix is captured.
+#
+# Per-route env overrides (12-factor — keep secrets out of this file):
+#   B2BD_WEBHOOK_TOKEN_<LABEL>   overrides token for the route
+#   B2BD_WEBHOOK_SECRET_<LABEL>  overrides secret_token for the route
+# where <LABEL> is the upper-cased label with '-' replaced by '_'.
+# e.g. label "router-bot" → B2BD_WEBHOOK_TOKEN_ROUTER_BOT. The env value, when
+# set, takes precedence over the YAML value for that route.
+#
+# Example (uncomment and adjust):
+#
+# webhook_routes:
+#   - label: "router-bot"            # becomes /webhook/router-bot
+#     token: "123456:AAAA..."        # bot token — used only to derive hash
+#     target: "http://localhost:4000" # bot server that handles the update
+#     secret_token: "my-shared-secret" # optional; leave empty to skip check
+#
+#   - label: "sales-bot"
+#     token: "789012:BBBB..."
+#     target: "http://localhost:4001"
+webhook_routes: []

@@ -1,0 +1,55 @@
+# syntax=docker/dockerfile:1.7
+#
+# Dockerfile.demo — the support-team example bots, for the compose `demo`
+# profile ONLY. It is a separate, minimal image so the main b2bdbg image
+# (Dockerfile) is not bloated with example code.
+#
+# The resulting binary runs the support-team demo in external-proxy mode
+# (B2BD_EXAMPLE_PROXY_BASE_URL set by docker-compose): an in-process mock
+# Telegram on a real TCP port, with all bots routed through the composed b2bdbg
+# proxy. No real Telegram tokens and no internet access are required.
+
+# ---------------------------------------------------------------------------
+# Stage 1 — module cache (separate layer for faster rebuilds)
+# ---------------------------------------------------------------------------
+FROM golang:1.25-bookworm AS deps
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download -x
+
+# ---------------------------------------------------------------------------
+# Stage 2 — build the static example binary
+# ---------------------------------------------------------------------------
+FROM deps AS builder
+
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_DATE=unknown
+
+COPY . .
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux \
+    go build \
+      -trimpath \
+      -ldflags "-s -w" \
+      -o /bin/examples-demo ./examples/support-team
+
+# ---------------------------------------------------------------------------
+# Stage 3 — distroless runtime (no shell, no libc, non-root uid 65532)
+# ---------------------------------------------------------------------------
+FROM gcr.io/distroless/static-debian12:nonroot
+
+COPY --from=builder /bin/examples-demo /examples-demo
+
+# Mock Telegram listens here in external-proxy mode (see B2BD_EXAMPLE_MOCK_ADDR
+# in docker-compose.yml); the composed b2bdbg uses it as its upstream.
+EXPOSE 8081
+
+USER nonroot:nonroot
+
+ENTRYPOINT ["/examples-demo"]

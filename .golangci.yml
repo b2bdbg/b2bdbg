@@ -1,0 +1,27 @@
+version: "2"
+
+formatters:
+  enable:
+    - gofumpt
+
+linters:
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - revive
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  revive:
+    rules:
+      - name: exported
+        arguments:
+          - disableStutteringCheck
+      - name: var-naming
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: b2bdbg
+    orgId: 1
+    folder: "bot-to-bot debugger"
+    type: file
+    disableDeletion: true
+    editable: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards

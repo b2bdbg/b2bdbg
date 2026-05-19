@@ -1,0 +1,258 @@
+# docker-compose.yml — B2BDBG full stack
+#
+# Copy .env.example → .env and adjust port numbers before first run.
+#
+# Services exposed on the host (defaults from .env.example):
+#   http://localhost:8080       b2bdbg proxy + /metrics + /healthz
+#   http://localhost:16686      Jaeger UI
+#   http://localhost:9090       Prometheus
+#   http://localhost:3000       Grafana (admin / $GRAFANA_ADMIN_PASSWORD)
+#
+# Quick start:
+#   cp .env.example .env
+#   docker compose up -d
+#   docker compose logs -f b2bdbg
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+
+  # --------------------------------------------------------------------------
+  # b2bdbg — the proxy + telemetry sink
+  # --------------------------------------------------------------------------
+  b2bdbg:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: "${VERSION:-dev}"
+        COMMIT: "${COMMIT:-unknown}"
+        BUILD_DATE: "${BUILD_DATE:-unknown}"
+    image: b2bdbg:${VERSION:-dev}
+    container_name: b2bdbg
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      # Listen on all interfaces inside the container.
+      B2BD_LISTEN_ADDR: ":8080"
+      # Forward to real Telegram by default. For the offline demo profile this
+      # is overridden to the support-team-demo mock, e.g.:
+      #   B2BD_TELEGRAM_BASE_URL=http://support-team-demo:8081
+      # (the `make compose-demo` target sets this for you).
+      B2BD_TELEGRAM_BASE_URL: "${B2BD_TELEGRAM_BASE_URL:-https://api.telegram.org}"
+      # OTLP gRPC endpoint — targets the jaeger service (port 4317).
+      B2BD_OTEL_ENDPOINT: "jaeger:4317"
+      B2BD_LOG_LEVEL: "${B2BD_LOG_LEVEL:-info}"
+      # Token-cost estimate rate (USD per 1,000 tokens). Default 0 = the
+      # b2b_token_cost_usd metric stays 0 (honest: no cost claimed until you
+      # set a real rate). Set e.g. B2BD_COST_PER_K_TOKENS=0.50 in .env to
+      # populate the cost panels.
+      B2BD_COST_PER_K_TOKENS: "${B2BD_COST_PER_K_TOKENS:-0}"
+    ports:
+      # Host port configurable via B2BD_PORT in .env.
+      - "${B2BD_PORT:-8080}:8080"
+    networks:
+      - b2b
+    depends_on:
+      jaeger:
+        # Jaeger all-in-one ≥ v1.46 is distroless (no shell/wget) so its
+        # healthcheck is disabled; use service_started and let the OTLP
+        # exporter handle connection retries.
+        condition: service_started
+    healthcheck:
+      # Use the binary's built-in healthcheck subcommand — no shell or wget
+      # available in the distroless image.
+      test: ["CMD", "/b2bdbg", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # --------------------------------------------------------------------------
+  # Jaeger all-in-one — traces backend + UI
+  # Image: https://hub.docker.com/r/jaegertracing/all-in-one
+  # OTLP gRPC receiver on 4317; OTLP HTTP on 4318; UI on 16686.
+  # --------------------------------------------------------------------------
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    container_name: jaeger
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      # Enable OTLP receivers (gRPC + HTTP) in addition to Jaeger native.
+      COLLECTOR_OTLP_ENABLED: "true"
+      # Keep memory store (no external backend needed for dev).
+      SPAN_STORAGE_TYPE: "memory"
+      MEMORY_MAX_TRACES: "50000"
+    ports:
+      # Jaeger UI
+      - "${JAEGER_UI_PORT:-16686}:16686"
+      # OTLP gRPC (used by b2bdbg) — not exposed to the host by default.
+      # - "4317:4317"
+      # OTLP HTTP — not exposed to the host by default.
+      # - "4318:4318"
+    networks:
+      - b2b
+    # jaegertracing/all-in-one ≥ v1.46 uses gcr.io/distroless/static as its
+    # final stage — no shell, no wget, so no in-container health probe is
+    # possible.  Healthcheck is disabled (NONE).  The b2bdbg service therefore
+    # uses condition: service_started (not service_healthy) for its jaeger
+    # dependency, and relies on OTLP retry / back-off for resilience.
+    # If you add a busybox sidecar you can re-enable with:
+    #   test: ["CMD", "wget", "-qO-", "http://localhost:14269/"]
+    healthcheck:
+      disable: true
+
+  # --------------------------------------------------------------------------
+  # Prometheus — scrapes b2bdbg /metrics
+  # --------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v3.4.0
+    container_name: prometheus
+    restart: unless-stopped
+    logging: *default-logging
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"
+      - "--web.enable-lifecycle"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    networks:
+      - b2b
+    depends_on:
+      b2bdbg:
+        condition: service_healthy
+    healthcheck:
+      # prom/prometheus is busybox-based: wget is available.  Exec form avoids
+      # shell-injection risk and works even when /bin/sh is missing.
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # --------------------------------------------------------------------------
+  # Grafana — auto-provisioned datasources (Prometheus + Jaeger) + dashboard
+  # --------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:11.5.4
+    container_name: grafana
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-admin}"
+      GF_SECURITY_ADMIN_USER: "admin"
+      # Disable sign-up; this stack is local-dev only.
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      # Allow anonymous read-only access to dashboards (handy for demos).
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+      # Default UI theme (light is cleaner for README screenshots).
+      # Override per env: GRAFANA_THEME=dark.
+      GF_USERS_DEFAULT_THEME: "${GRAFANA_THEME:-light}"
+      # Plugins needed for the Jaeger datasource (built in ≥ Grafana 10).
+      GF_INSTALL_PLUGINS: ""
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    networks:
+      - b2b
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      jaeger:
+        # Jaeger is distroless — healthcheck disabled; wait only for start.
+        condition: service_started
+    healthcheck:
+      # grafana/grafana is Alpine-based: wget is available.  Exec form avoids
+      # shell-injection risk and works even when /bin/sh is missing.
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  # --------------------------------------------------------------------------
+  # support-team-demo — offline bot↔bot conversation driver (optional)
+  #
+  # Start with:   make compose-demo
+  #          (or) B2BD_TELEGRAM_BASE_URL=http://support-team-demo:8081 \
+  #               docker compose --profile demo up
+  #
+  # What it does: runs the five support-team example bots in external-proxy
+  #               mode. The bots route every Bot API call through the composed
+  #               `b2bdbg` service (B2BD_EXAMPLE_PROXY_BASE_URL=http://b2bdbg:8080),
+  #               and this container also serves the in-process mock Telegram
+  #               backend on :8081, which the composed b2bdbg uses as its
+  #               upstream (B2BD_TELEGRAM_BASE_URL=http://support-team-demo:8081).
+  #               So bot↔bot spans land in the composed Jaeger and metrics are
+  #               scraped by the composed Prometheus — with no real Telegram
+  #               tokens and no internet access.
+  #
+  # This is a SEPARATE, minimal image (Dockerfile.demo) so the main b2bdbg image
+  # stays lean. It is gated behind the `demo` compose profile, so the default
+  # `docker compose up -d` never builds or starts it.
+  # --------------------------------------------------------------------------
+  support-team-demo:
+    build:
+      context: .
+      dockerfile: Dockerfile.demo
+      args:
+        VERSION: "${VERSION:-dev}"
+        COMMIT: "${COMMIT:-unknown}"
+        BUILD_DATE: "${BUILD_DATE:-unknown}"
+    image: b2bdbg-examples-demo:${VERSION:-dev}
+    container_name: support-team-demo
+    profiles:
+      - demo
+    logging: *default-logging
+    environment:
+      # Route every bot's Bot API call through the composed b2bdbg proxy. The
+      # example reads this in run() → runDemoExternalProxy (see main.go); when
+      # set, NO in-process proxy/telemetry is created — the composed b2bdbg owns
+      # capture and export.
+      B2BD_EXAMPLE_PROXY_BASE_URL: "http://b2bdbg:8080"
+      # Serve the in-process mock Telegram on this address. The composed b2bdbg
+      # must point its upstream here (B2BD_TELEGRAM_BASE_URL); see Makefile
+      # target `compose-demo`.
+      B2BD_EXAMPLE_MOCK_ADDR: ":8081"
+      # Opt-in sustained-traffic knobs (read once in run() → runScriptedTraffic;
+      # see examples/support-team/main.go). Unset by default → the demo runs the
+      # scripted conversation exactly once (one-shot, unchanged behaviour, so
+      # `make compose-demo` and `make compose-smoke` are not affected). Set them
+      # via `make compose-demo-traffic` to keep generating traffic for Grafana
+      # screenshots. Empty string is treated as unset by the example.
+      B2BD_EXAMPLE_DURATION: "${B2BD_EXAMPLE_DURATION:-}"
+      B2BD_EXAMPLE_INTERVAL: "${B2BD_EXAMPLE_INTERVAL:-}"
+    networks:
+      - b2b
+    depends_on:
+      b2bdbg:
+        condition: service_healthy
+    restart: "no"
+
+networks:
+  b2b:
+    name: b2b
+    driver: bridge
+
+volumes:
+  prometheus_data:
+    # NOTE: this is the on-disk Docker volume name. Rename only on a fresh
+    # install — renaming on an existing stack orphans the old `b2bd_*` volume.
+    name: b2bdbg_prometheus_data
+  grafana_data:
+    name: b2bdbg_grafana_data

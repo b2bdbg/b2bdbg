@@ -1,0 +1,131 @@
+# .goreleaser.yaml — cross-compiled release for b2bdbg
+# Docs: https://goreleaser.com/customization/
+version: 2
+
+project_name: b2bdbg
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+# ---------------------------------------------------------------------------
+# Cross-compiled static binaries
+# ---------------------------------------------------------------------------
+builds:
+  - id: b2bdbg
+    binary: b2bdbg
+    main: ./cmd/b2bdbg
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    # Produces: linux/amd64, linux/arm64, darwin/amd64, darwin/arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    flags:
+      - -trimpath
+
+# ---------------------------------------------------------------------------
+# Release archives
+# ---------------------------------------------------------------------------
+archives:
+  - id: b2bdbg
+    ids: [b2bdbg]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - LICENSE
+      - config.example.yaml
+
+# ---------------------------------------------------------------------------
+# Checksums
+# ---------------------------------------------------------------------------
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+# ---------------------------------------------------------------------------
+# Source tarball
+# ---------------------------------------------------------------------------
+source:
+  enabled: true
+  name_template: "{{ .ProjectName }}_{{ .Version }}_source"
+
+# ---------------------------------------------------------------------------
+# SBOM (CycloneDX, one per archive artifact)
+# ---------------------------------------------------------------------------
+sboms:
+  - artifacts: archive
+    args: ["$artifact", "--output", "cyclonedx-json=$document"]
+
+# ---------------------------------------------------------------------------
+# Docker image — multi-arch manifest pushed to GHCR (dockers_v2 API)
+# ---------------------------------------------------------------------------
+dockers_v2:
+  - id: b2bdbg
+    ids: [b2bdbg]
+    dockerfile: Dockerfile
+    images:
+      - "ghcr.io/b2bdbg/b2bdbg"
+    tags:
+      - "{{ .Tag }}"
+      - "latest"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    build_args:
+      VERSION: "{{ .Version }}"
+      COMMIT: "{{ .Commit }}"
+      BUILD_DATE: "{{ .Date }}"
+    labels:
+      org.opencontainers.image.title: "b2bdbg"
+      org.opencontainers.image.description: "Reverse proxy that captures and debugs Telegram bot conversations"
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .Commit }}"
+      org.opencontainers.image.created: "{{ .Date }}"
+      org.opencontainers.image.source: "https://github.com/b2bdbg/b2bdbg"
+      org.opencontainers.image.licenses: "Apache-2.0"
+
+# ---------------------------------------------------------------------------
+# GitHub release notes
+# ---------------------------------------------------------------------------
+release:
+  github:
+    owner: b2bdbg
+    name: b2bdbg
+  draft: false
+  prerelease: auto
+  name_template: "{{ .Tag }}"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge pull request"
+      - "Merge branch"
+  groups:
+    - title: "Features"
+      regexp: "^feat"
+      order: 0
+    - title: "Bug fixes"
+      regexp: "^fix"
+      order: 1
+    - title: "Other"
+      order: 999

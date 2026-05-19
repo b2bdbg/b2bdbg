@@ -1,0 +1,261 @@
+{
+  "__inputs": [],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "11.5.0" },
+    { "type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0" },
+    { "type": "datasource", "id": "jaeger", "name": "Jaeger", "version": "1.0.0" }
+  ],
+  "annotations": { "list": [] },
+  "description": "Telegram bot-to-bot debugger — proxy throughput, loop detection, token cost, and trace links.",
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "Traffic",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Rate of Bot API calls proxied per second, broken down by Telegram method (sendMessage, getUpdates, …).\nMetric: b2b_messages_total (counter, label: method)",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 },
+          "unit": "reqps"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "id": 1,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (method) (rate(b2b_messages_total[1m]))",
+          "legendFormat": "{{method}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Messages / sec by method (b2b_messages_total)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Cumulative count of Bot API calls proxied.\nMetric: b2b_messages_total",
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }] } }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+      "id": 2,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(b2b_messages_total)",
+          "legendFormat": "total",
+          "refId": "A"
+        }
+      ],
+      "title": "Total messages proxied",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Cumulative bot↔bot loops detected.\nMetric: b2b_loops_total",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+      "id": 3,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(b2b_loops_total)",
+          "legendFormat": "loops",
+          "refId": "A"
+        }
+      ],
+      "title": "Loop events detected (b2b_loops_total)",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "id": 101,
+      "title": "Loop detection & Spam",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Rolling fraction of proxied messages that are part of a detected loop.\nMetric: b2b_spam_ratio (gauge, 0.0–1.0)\nThreshold: >0.20 = warning, >0.50 = critical.",
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.2 },
+              { "color": "red", "value": 0.5 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 10 },
+      "id": 4,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "showThresholdLabels": true, "showThresholdMarkers": true },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "b2b_spam_ratio",
+          "legendFormat": "spam ratio",
+          "refId": "A"
+        }
+      ],
+      "title": "Spam ratio (b2b_spam_ratio)",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Loop detection rate over time.\nRate of b2b_loops_total per second vs messages_total per second.",
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2 } }
+      },
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 10 },
+      "id": 5,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(b2b_loops_total[1m])",
+          "legendFormat": "loops/s (b2b_loops_total)",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(b2b_messages_total[1m]))",
+          "legendFormat": "messages/s (b2b_messages_total)",
+          "refId": "B"
+        }
+      ],
+      "title": "Loop rate vs message rate",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+      "id": 102,
+      "title": "Token Cost",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Cumulative estimated LLM token cost in USD (heuristic: chars/4 × rate/1k tokens).\nMetric: b2b_token_cost_usd (counter)\nSet B2BD_COST_PER_K_TOKENS in the proxy to get non-zero values.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "green", "value": null }] }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 19 },
+      "id": 6,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(b2b_token_cost_usd)",
+          "legendFormat": "cost USD",
+          "refId": "A"
+        }
+      ],
+      "title": "Estimated token cost (b2b_token_cost_usd)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Rate of token cost accumulation in USD/sec.\nMetric: b2b_token_cost_usd",
+      "fieldConfig": {
+        "defaults": { "unit": "currencyUSD", "custom": { "lineWidth": 2 } }
+      },
+      "gridPos": { "h": 8, "w": 18, "x": 6, "y": 19 },
+      "id": 7,
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(b2b_token_cost_usd[1m])",
+          "legendFormat": "USD/sec (b2b_token_cost_usd)",
+          "refId": "A"
+        }
+      ],
+      "title": "Token cost rate (b2b_token_cost_usd)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 },
+      "id": 103,
+      "title": "Distributed Traces (Jaeger)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "jaeger", "uid": "jaeger" },
+      "description": "Live trace search from Jaeger.\n\nEach span covers one Bot API call and carries these attributes:\n  • telegram.bot.from   — originating bot token hash\n  • telegram.bot.to     — destination bot token hash\n  • telegram.method     — Bot API method (sendMessage, getUpdates, …)\n  • telegram.chat.id    — Telegram chat ID\n  • telegram.msg.id     — Telegram message ID\n  • telegram.text.len   — message text length\n  • b2b.loop.depth      — loop nesting depth (0 = clean)\n  • b2b.tokens.est      — estimated token count (chars/4)\n  • b2b.cost.usd.est    — estimated cost for this span in USD\n\nFilter examples in Jaeger UI:\n  b2b.loop.depth > 0          → find all loop spans\n  telegram.method = sendMessage\n  telegram.bot.from = <hash>",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 28 },
+      "id": 8,
+      "options": {
+        "query": {
+          "service": "b2bdbg"
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "jaeger", "uid": "jaeger" },
+          "queryType": "search",
+          "refId": "A",
+          "service": "b2bdbg"
+        }
+      ],
+      "title": "Traces — b2bdbg service (span attrs: telegram.bot.from/to, telegram.method, b2b.loop.depth, b2b.cost.usd.est)",
+      "type": "traces"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "tags": ["b2b", "telegram", "bot", "proxy", "opentelemetry"],
+  "templating": { "list": [] },
+  "time": { "from": "now-15m", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "bot-to-bot debugger (b2bdbg)",
+  "uid": "b2bdbg-main",
+  "version": 1
+}

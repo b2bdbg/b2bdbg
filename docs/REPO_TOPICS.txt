@@ -1,0 +1,14 @@
+# GitHub repository topics
+# Set these via: Settings → About → Topics (gear icon)
+# or via: gh repo edit --add-topic <topic> (one at a time)
+
+telegram
+telegram-bot
+opentelemetry
+observability
+tracing
+ai-agents
+jaeger
+debugging
+prometheus
+golang

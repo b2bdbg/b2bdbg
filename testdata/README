@@ -1,0 +1,30 @@
+testdata — Bot API JSON fixtures
+=================================
+
+All files in this directory are hand-written test fixtures. They do not
+contain real bot tokens, real user IDs, or real chat IDs. All numeric IDs
+and usernames are synthetic values chosen for readability in tests.
+
+Files
+-----
+
+getme_response.json
+  A synthetic Telegram Bot API getMe success response.
+  Bot ID 123456789, username "testbot".
+
+sendmessage_request.json
+  A synthetic sendMessage request body (JSON-encoded parameters).
+  Targets chat_id 987654321 with a plain HTML message.
+
+sendmessage_response.json
+  A synthetic sendMessage success response, echoing message_id 42.
+
+getupdates_response.json
+  A synthetic getUpdates success response containing one Update from a
+  private chat. update_id 100000001, user "alice" (ID 111111111).
+
+Provenance
+----------
+All fixtures are hand-written by the b2bdbg project authors.
+No real Telegram API traffic was captured or stored here.
+No secrets, tokens, or personally-identifiable information is present.

@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  ci:
+    name: build / test / lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: go mod tidy check
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.12.2
+
+      - name: Test
+        run: go test -race -timeout 60s ./...
+
+      - name: Build
+        run: |
+          go build -ldflags "-X main.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)" \
+            -o bin/b2bdbg ./cmd/b2bdbg
+
+      - name: Docker build smoke
+        # Validates the Dockerfile builds successfully on every CI run.
+        # No push — this is purely a build smoke test.
+        run: |
+          docker build \
+            --build-arg VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev) \
+            --build-arg COMMIT=$(git rev-parse --short HEAD) \
+            --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+            -t b2bdbg:ci-smoke \
+            .

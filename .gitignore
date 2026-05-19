@@ -1,0 +1,31 @@
+# binaries
+bin/
+
+# config (keep example, ignore real)
+config.yaml
+
+# local env overrides (never commit secrets)
+# This also covers the optional .env.e2e convenience file holding the real
+# B2BD_E2E_* bot tokens for `make test-telegram` (see docs/e2e-testing.md):
+# .env.* is ignored and only .env.example is exempted, so secrets cannot be
+# staged.
+.env
+.env.*
+!.env.example
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+
+# test cache
+*.test
+
+# golangci-lint cache
+.golangci-lint-cache/
+
+# goreleaser output
+dist/
+
+# internal/helper docs — never publish
+.dev/

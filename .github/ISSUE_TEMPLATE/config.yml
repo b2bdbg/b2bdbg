@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/b2bdbg/b2bdbg/security/policy
+    about: Do NOT open a public issue for security problems. See SECURITY.md and report privately.
+  - name: Documentation
+    url: https://github.com/b2bdbg/b2bdbg/tree/main/docs
+    about: Quickstart, architecture, span schema, frameworks, and limitations.

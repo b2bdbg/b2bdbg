@@ -1,0 +1,18 @@
+bin/
+.git/
+.github/
+*.md
+testdata/
+deploy/
+docs/
+# examples/ is required by Dockerfile.demo (the support-team demo image).
+# The main b2bdbg Dockerfile builds only ./cmd/b2bdbg, so the extra source in
+# the builder layer is discarded and the final distroless image stays lean.
+# (Do NOT add `examples/` here — it would break `make compose-demo`.)
+# local secrets / editor artefacts
+.env
+.env.*
+*.env
+*.swp
+*.swo
+.DS_Store
