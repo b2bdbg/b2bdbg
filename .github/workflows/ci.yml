@@ -30,7 +30,14 @@ jobs:
           version: v2.12.2
 
       - name: Test
-        run: go test -race -timeout 60s ./...
+        # Timeout is 180s, not 60s: the support-team integration test runs the
+        # full bot↔proxy↔mock-Telegram pipeline through real TCP listeners,
+        # and under -race on a shared GitHub runner the HTTP scheduling can
+        # stretch it close to a minute — well within healthy bounds, but the
+        # earlier 60s alarm clipped it mid-HandleTask. Locally the same test
+        # finishes in ~3.5s; 180s gives ~50× safety margin on slow runners
+        # without masking a real hang (a real hang still trips it).
+        run: go test -race -timeout 180s ./...
 
       - name: Build
         run: |
