@@ -9,6 +9,13 @@ permissions:
   contents: write   # create GitHub release + upload assets
   packages: write   # push to GHCR
 
+# Opt JS actions into Node 24 now. GitHub-hosted runners will force this
+# default on 2026-06-02 and remove Node 20 on 2026-09-16; setting the flag
+# pre-emptively silences the deprecation warning and de-risks the cutover.
+# Remove this once every JS action used below ships a Node 24 build natively.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   goreleaser:
     name: GoReleaser
