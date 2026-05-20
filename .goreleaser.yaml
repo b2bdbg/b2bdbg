@@ -77,7 +77,13 @@ sboms:
 dockers_v2:
   - id: b2bdbg
     ids: [b2bdbg]
-    dockerfile: Dockerfile
+    # Use the release-only single-stage Dockerfile, NOT the multi-stage
+    # `Dockerfile`. The multi-stage one builds from source (COPY go.mod
+    # go.sum + go build) and expects the repo root as its build context;
+    # goreleaser's docker build context is `dist/` (just the pre-built
+    # binary), so the multi-stage path fails at COPY go.sum. See the
+    # comment block at the top of Dockerfile.release for the full rationale.
+    dockerfile: Dockerfile.release
     images:
       - "ghcr.io/b2bdbg/b2bdbg"
     tags:

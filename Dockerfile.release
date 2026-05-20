@@ -1,0 +1,42 @@
+# syntax=docker/dockerfile:1.7
+#
+# Dockerfile.release — release-only image used by goreleaser.
+#
+# Why a separate file from `Dockerfile`:
+#
+#   `Dockerfile` is a multi-stage "build from source" image used by
+#   docker-compose.yml and the CI `Docker build smoke` step. It expects the
+#   build context to be the repo root (it COPYs go.mod, go.sum, and the source
+#   tree, then runs `go build` inside the builder stage).
+#
+#   `goreleaser` already cross-compiles the binary itself (via the `builds:`
+#   block in .goreleaser.yaml) and invokes Docker buildx with a context that
+#   contains the *pre-built per-platform binary* — not the source tree, and
+#   not go.mod / go.sum. Pointing goreleaser at the multi-stage Dockerfile
+#   fails immediately with `"/go.sum": not found` because those files simply
+#   aren't in its build context.
+#
+#   This file is the release-only path: single stage, no Go toolchain, just
+#   copy the pre-built binary into the same distroless runtime the multi-
+#   stage Dockerfile produces. The two images are byte-equivalent in the
+#   shipped layer — only the build path differs.
+
+FROM gcr.io/distroless/static-debian12:nonroot
+
+# goreleaser places the per-platform binary at the build-context root under
+# its `builds:` `binary:` name. Both linux/amd64 and linux/arm64 use the
+# same dockerfile via buildx; goreleaser swaps the underlying binary per
+# platform automatically.
+COPY b2bdbg /b2bdbg
+
+# Proxy + admin/metrics/health all share one port (see internal/server).
+EXPOSE 8080
+
+# Built-in healthcheck using the binary itself — no shell or wget exists in
+# the distroless image. Identical to the Dockerfile multi-stage variant.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD ["/b2bdbg", "healthcheck"]
+
+USER nonroot:nonroot
+
+ENTRYPOINT ["/b2bdbg"]
