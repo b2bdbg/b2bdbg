@@ -25,14 +25,21 @@ services:
   # b2bdbg — the proxy + telemetry sink
   # --------------------------------------------------------------------------
   b2bdbg:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        VERSION: "${VERSION:-dev}"
-        COMMIT: "${COMMIT:-unknown}"
-        BUILD_DATE: "${BUILD_DATE:-unknown}"
-    image: b2bdbg:${VERSION:-dev}
+    # Default to the public multi-arch image on GHCR — `docker compose up -d`
+    # works with only this file + .env, no clone needed. Pin to a specific
+    # release with `B2BDBG_IMAGE=ghcr.io/b2bdbg/b2bdbg:0.1.0` in .env, or
+    # leave it floating on `:latest`.
+    image: ${B2BDBG_IMAGE:-ghcr.io/b2bdbg/b2bdbg:latest}
+    # Dev-mode override: uncomment the `build:` block (and comment the
+    # `image:` line above) to build from source. The `image:` field also
+    # acts as the local tag for the freshly-built image.
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    #   args:
+    #     VERSION: "${VERSION:-dev}"
+    #     COMMIT: "${COMMIT:-unknown}"
+    #     BUILD_DATE: "${BUILD_DATE:-unknown}"
     container_name: b2bdbg
     restart: unless-stopped
     logging: *default-logging

@@ -153,9 +153,44 @@ estimate as attributes:
 
 ---
 
+## Install
+
+Pick the install path that fits — all three give you the same binary.
+
+**A. Just the proxy, one Docker command** (smallest possible footprint):
+
+```bash
+docker run -d --name b2bdbg \
+  -p 8080:8080 \
+  ghcr.io/b2bdbg/b2bdbg:latest
+```
+
+Now point your bot's Bot API base URL at `http://localhost:8080/bot` and traces export to stdout. Add `-e B2BD_OTEL_ENDPOINT=otel-collector:4317` to send OTLP/gRPC.
+
+**B. Full trace/metrics stack (proxy + Jaeger + Prometheus + Grafana), no clone needed:**
+
+```bash
+curl -O https://raw.githubusercontent.com/b2bdbg/b2bdbg/master/docker-compose.yml
+curl -O https://raw.githubusercontent.com/b2bdbg/b2bdbg/master/.env.example
+mv .env.example .env
+docker compose up -d
+```
+
+**C. Static binary** (linux/darwin × amd64/arm64) from GitHub Releases:
+
+```bash
+# Linux amd64 example — substitute your OS/arch from the Releases page
+curl -L https://github.com/b2bdbg/b2bdbg/releases/latest/download/b2bdbg_linux_amd64.tar.gz | tar xz
+./b2bdbg --listen :8080
+```
+
+Releases page: <https://github.com/b2bdbg/b2bdbg/releases>. Every release ships SHA-256 checksums and a CycloneDX SBOM per artifact.
+
+---
+
 ## Quickstart
 
-One command brings up the proxy plus a full trace/metrics stack:
+The full stack (path B above) brings up the proxy plus a trace/metrics dashboard with one command:
 
 ```bash
 cp .env.example .env && docker compose up -d
