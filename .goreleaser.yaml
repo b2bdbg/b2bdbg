@@ -72,38 +72,67 @@ sboms:
     args: ["$artifact", "--output", "cyclonedx-json=$document"]
 
 # ---------------------------------------------------------------------------
-# Docker image — multi-arch manifest pushed to GHCR (dockers_v2 API)
+# Docker images — per-arch builds + manifest list pushed to GHCR.
+#
+# We use the stable `dockers:` API (not the experimental `dockers_v2:`).
+# Reason: dockers_v2 hands buildx an essentially empty build context, so a
+# Dockerfile that does `COPY b2bdbg /b2bdbg` fails at "/b2bdbg: not found".
+# The stable `dockers:` API runs one buildx build per (goos, goarch) and
+# *automatically* copies that arch's pre-built binary into the build context
+# root, which is exactly what Dockerfile.release expects.
+#
+# `docker_manifests:` below stitches the two per-arch images into a single
+# multi-arch manifest list so `docker pull ghcr.io/b2bdbg/b2bdbg:VERSION`
+# resolves to the right arch on each host.
 # ---------------------------------------------------------------------------
-dockers_v2:
-  - id: b2bdbg
+dockers:
+  - id: b2bdbg-amd64
     ids: [b2bdbg]
-    # Use the release-only single-stage Dockerfile, NOT the multi-stage
-    # `Dockerfile`. The multi-stage one builds from source (COPY go.mod
-    # go.sum + go build) and expects the repo root as its build context;
-    # goreleaser's docker build context is `dist/` (just the pre-built
-    # binary), so the multi-stage path fails at COPY go.sum. See the
-    # comment block at the top of Dockerfile.release for the full rationale.
+    goos: linux
+    goarch: amd64
     dockerfile: Dockerfile.release
-    images:
-      - "ghcr.io/b2bdbg/b2bdbg"
-    tags:
-      - "{{ .Tag }}"
-      - "latest"
-    platforms:
-      - linux/amd64
-      - linux/arm64
-    build_args:
-      VERSION: "{{ .Version }}"
-      COMMIT: "{{ .Commit }}"
-      BUILD_DATE: "{{ .Date }}"
-    labels:
-      org.opencontainers.image.title: "b2bdbg"
-      org.opencontainers.image.description: "Reverse proxy that captures and debugs Telegram bot conversations"
-      org.opencontainers.image.version: "{{ .Version }}"
-      org.opencontainers.image.revision: "{{ .Commit }}"
-      org.opencontainers.image.created: "{{ .Date }}"
-      org.opencontainers.image.source: "https://github.com/b2bdbg/b2bdbg"
-      org.opencontainers.image.licenses: "Apache-2.0"
+    use: buildx
+    image_templates:
+      - "ghcr.io/b2bdbg/b2bdbg:{{ .Version }}-amd64"
+      - "ghcr.io/b2bdbg/b2bdbg:latest-amd64"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.title=b2bdbg"
+      - "--label=org.opencontainers.image.description=Reverse proxy that captures and debugs Telegram bot conversations"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .Commit }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.source=https://github.com/b2bdbg/b2bdbg"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+
+  - id: b2bdbg-arm64
+    ids: [b2bdbg]
+    goos: linux
+    goarch: arm64
+    dockerfile: Dockerfile.release
+    use: buildx
+    image_templates:
+      - "ghcr.io/b2bdbg/b2bdbg:{{ .Version }}-arm64"
+      - "ghcr.io/b2bdbg/b2bdbg:latest-arm64"
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.title=b2bdbg"
+      - "--label=org.opencontainers.image.description=Reverse proxy that captures and debugs Telegram bot conversations"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .Commit }}"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.source=https://github.com/b2bdbg/b2bdbg"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+
+docker_manifests:
+  - name_template: "ghcr.io/b2bdbg/b2bdbg:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/b2bdbg/b2bdbg:{{ .Version }}-amd64"
+      - "ghcr.io/b2bdbg/b2bdbg:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/b2bdbg/b2bdbg:latest"
+    image_templates:
+      - "ghcr.io/b2bdbg/b2bdbg:latest-amd64"
+      - "ghcr.io/b2bdbg/b2bdbg:latest-arm64"
 
 # ---------------------------------------------------------------------------
 # GitHub release notes
